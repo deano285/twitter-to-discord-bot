@@ -21,63 +21,65 @@ LAST_TWEETS_DIR = "last_tweets"
 os.makedirs(LAST_TWEETS_DIR, exist_ok=True)
 
 
-def get_latest_tweet(username):
-    """Fetch the latest tweet from Nitter RSS."""
+def get_latest_tweets(username, max_tweets=3):
+    """Fetch the latest tweets from Nitter RSS (up to max_tweets)."""
     url = f"{NITTER_INSTANCE}/{username}/rss"
     headers = {"User-Agent": "Mozilla/5.0"}
 
+    tweets = []
+    
     try:
         response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()  # Raise an error if response is bad
+        response.raise_for_status()  # Raise error if response is bad
 
         from xml.etree import ElementTree as ET
         root = ET.fromstring(response.text)
-        first_item = root.find(".//item")
+        items = root.findall(".//item")[:max_tweets]  # Get the latest max_tweets
 
-        if first_item is not None:
-            tweet_link = first_item.find("link").text
+        for item in items:
+            tweet_link = item.find("link").text
             tweet_id = tweet_link.split("/")[-1]  # Extract tweet ID
-            tweet_description = first_item.find("description").text
+            tweet_description = item.find("description").text
 
             # Extract first image if available
             tweet_image = extract_image_from_description(tweet_description)
 
-            return tweet_id, tweet_link, tweet_description, tweet_image
+            tweets.append((tweet_id, tweet_link, tweet_description, tweet_image))
+    
     except requests.exceptions.RequestException as e:
         print(f"❌ Error fetching tweets for @{username}: {e}")
 
-    return None, None, None, None  # Return empty values if there's an error
-
-
-def extract_image_from_description(description):
-    """Extract the first image URL from the tweet description."""
-    if description:
-        match = re.search(r'<img src="(.*?)"', description)
-        if match:
-            return match.group(1)  # Return the first image URL found
-    return None  # No image found
+    return tweets  # Return multiple tweets
 
 
 def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_image):
-    """Send new tweet to the specified Discord webhook as an embed."""
+    """Send new tweet to the specified Discord webhook as a formatted embed."""
     if not webhook_url:  # Skip if webhook is missing
         print(f"⚠️ Skipping @{username}: Webhook URL is missing.")
         return
 
     embed = {
-        "title": f"New Tweet from @{username}",
+        "title": f"New Tweet from @{username} 📢",
         "url": tweet_link,
-        "description": tweet_description if tweet_description else "Click to view the tweet!",
+        "description": tweet_description if tweet_description else "Click the link to view the tweet!",
         "color": 1942002,  # Blue color for embed
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),  # Adds a timestamp
         "footer": {
-            "text": f"Follow @{username} on Twitter",
+            "text": f"Follow @{username} for more updates!",
             "icon_url": "https://abs.twimg.com/icons/apple-touch-icon-192x192.png"
         }
     }
 
-    # Include image in embed if available
+    # Include an image in embed if available
     if tweet_image:
         embed["image"] = {"url": tweet_image}
+
+    # Add author field for better formatting
+    embed["author"] = {
+        "name": f"@{username}",
+        "url": f"https://twitter.com/{username}",
+        "icon_url": "https://abs.twimg.com/icons/apple-touch-icon-192x192.png"
+    }
 
     payload = {"embeds": [embed]}
     headers = {"Content-Type": "application/json"}
@@ -113,21 +115,24 @@ def main():
 
             for username in usernames:
                 last_tweet_id = load_last_tweet(username)
-                tweet_id, tweet_link, tweet_description, tweet_image = get_latest_tweet(username)
+                tweets = get_latest_tweets(username, max_tweets=3)  # Fetch latest 3 tweets
 
-                if tweet_id and tweet_id != last_tweet_id:
-                    print(f"✅ New tweet found for @{username}: {tweet_link}")
-                    status = send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_image)
+                for tweet_id, tweet_link, tweet_description, tweet_image in reversed(tweets):
+                    if tweet_id and tweet_id != last_tweet_id:
+                        print(f"✅ New tweet found for @{username}: {tweet_link}")
+                        status = send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_image)
 
-                    if status == 204:  # Discord success code
-                        save_last_tweet(username, tweet_id)
-                        print(f"📢 Tweet posted to Discord webhook {webhook_url} for @{username}!")
+                        if status == 204:  # Discord success code
+                            save_last_tweet(username, tweet_id)
+                            print(f"📢 Tweet posted to Discord webhook {webhook_url} for @{username}!")
+                        else:
+                            print(f"⚠️ Failed to post tweet for @{username}. Status Code: {status}")
+
                     else:
-                        print(f"⚠️ Failed to post tweet for @{username}. Status Code: {status}")
-                else:
-                    print(f"🔄 No new tweets for @{username}. Checking again soon.")
+                        print(f"🔄 No new tweets for @{username}. Skipping...")
 
-        time.sleep(300)  # Wait 5 minutes before checking again
+        time.sleep(60)  # Check every 60 seconds instead of 300
+
 
 
 if __name__ == "__main__":
