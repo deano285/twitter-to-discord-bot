@@ -16,8 +16,26 @@ WEBHOOKS = {
     os.getenv("WEBHOOK_5"): ["NWGameStatus", "playnewworld"],
 }
 
-# ✅ Use a stable Nitter instance
-NITTER_INSTANCE = "https://nitter.poast.org"
+NITTER_INSTANCES = [
+    "https://nitter.poast.org",
+    "https://nitter.privacydev.net",
+    "https://nitter.42l.fr",
+    "https://nitter.cz"
+]
+
+def get_working_nitter_instance():
+    """Try different Nitter instances until one works."""
+    for instance in NITTER_INSTANCES:
+        try:
+            test_url = f"{instance}/twitter/rss"
+            response = requests.get(test_url, timeout=5)
+            if response.status_code == 200:
+                print(f"✅ Using Nitter instance: {instance}")
+                return instance
+        except requests.RequestException:
+            continue
+    print("❌ No working Nitter instances found!")
+    return None  # No instance is available
 
 # 📁 Directory to store last tweet IDs
 LAST_TWEETS_DIR = "last_tweets"
@@ -55,8 +73,12 @@ def clean_tweet_description(description):
 
 
 def get_latest_tweets(username, max_tweets=3):
-    """Fetch the latest tweets from Nitter RSS (up to max_tweets) and extract timestamps."""
-    url = f"{NITTER_INSTANCE}/{username}/rss"
+    """Fetch the latest tweets from a working Nitter instance."""
+    nitter_instance = get_working_nitter_instance()
+    if not nitter_instance:
+        return []  # Skip if no instance is available
+
+    url = f"{nitter_instance}/{username}/rss"
     headers = {"User-Agent": "Mozilla/5.0"}
 
     tweets = []
@@ -81,9 +103,10 @@ def get_latest_tweets(username, max_tweets=3):
             tweets.append((tweet_id, tweet_link, tweet_description, tweet_image, tweet_timestamp))
     
     except requests.exceptions.RequestException as e:
-        print(f"❌ Error fetching tweets for @{username}: {e}")
+        print(f"❌ Error fetching tweets for @{username} using {nitter_instance}: {e}")
 
     return tweets  # Return multiple tweets
+
 
 
 def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_image, tweet_timestamp):
