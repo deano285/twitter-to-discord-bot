@@ -46,21 +46,60 @@ def get_working_nitter_instance(username):
     return None
 
 
+import random
+
 def extract_media_from_tweet(tweet_link):
     """Fetch the Nitter tweet page and extract media (image/video) using OpenGraph metadata."""
     try:
+        # ✅ Introduce a random delay to prevent hitting rate limits
+        time.sleep(random.uniform(1, 3))  # Delay between 1-3 seconds
+
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(tweet_link, headers=headers, timeout=5)
         response.raise_for_status()
+        
         soup = BeautifulSoup(response.text, "html.parser")
         meta_image = soup.find("meta", property="og:image")
+        
         if meta_image:
             og_image = meta_image.get("content")
             if og_image and og_image.startswith("http"):
                 print(f"✅ Extracted media from tweet page: {og_image}")
                 return og_image
+
+    except requests.exceptions.HTTPError as e:
+        if response.status_code == 429:
+            print(f"⚠️ Rate limited by Nitter for {tweet_link}. Retrying with another instance...")
+            return retry_media_extraction(tweet_link)  # Retry with another Nitter instance
+
     except requests.exceptions.RequestException as e:
         print(f"⚠️ Failed to extract media from tweet page {tweet_link}: {e}")
+
+    return None  # No valid image found
+
+def retry_media_extraction(tweet_link):
+    """Retry extracting media using another Nitter instance if rate-limited."""
+    for instance in NITTER_INSTANCES:
+        alternate_tweet_link = tweet_link.replace(NITTER_INSTANCES[0], instance)  # Swap instances
+        try:
+            print(f"🔄 Retrying media extraction with {instance}")
+            headers = {"User-Agent": "Mozilla/5.0"}
+            response = requests.get(alternate_tweet_link, headers=headers, timeout=5)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.text, "html.parser")
+            meta_image = soup.find("meta", property="og:image")
+            
+            if meta_image:
+                og_image = meta_image.get("content")
+                if og_image and og_image.startswith("http"):
+                    print(f"✅ Extracted media from alternate instance: {og_image}")
+                    return og_image
+
+        except requests.exceptions.RequestException:
+            print(f"⚠️ Failed to fetch media from {instance}. Trying next instance...")
+
+    print(f"❌ All Nitter instances failed for {tweet_link}")
     return None
 
 
