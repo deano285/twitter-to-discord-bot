@@ -23,5 +23,9 @@ jobs:
 
       - name: Run Bot
         env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          WEBHOOK_1: ${{ secrets.WEBHOOK_1 }}
+          WEBHOOK_2: ${{ secrets.WEBHOOK_2 }}
+          WEBHOOK_3: ${{ secrets.WEBHOOK_3 }}
+          WEBHOOK_4: ${{ secrets.WEBHOOK_4 }}
+          WEBHOOK_5: ${{ secrets.WEBHOOK_5 }}
         run: python main.py
