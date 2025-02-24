@@ -17,7 +17,7 @@ WEBHOOKS = {
 }
 
 # ✅ Use a stable Nitter instance
-NITTER_INSTANCE = "https://nitter.privacydev.net"
+NITTER_INSTANCE = "https://nitter.poast.org"
 
 # 📁 Directory to store last tweet IDs
 LAST_TWEETS_DIR = "last_tweets"
@@ -25,14 +25,24 @@ os.makedirs(LAST_TWEETS_DIR, exist_ok=True)
 
 
 def extract_image_from_description(description):
-    """Extract the first image URL from the tweet description."""
-    if description:
-        soup = BeautifulSoup(description, "html.parser")
-        img_tag = soup.find("img")
-        if img_tag:
-            img_url = img_tag.get("src")
-            if img_url and img_url.startswith("http") and "nitter" not in img_url:
-                return img_url  # Return only valid image URLs
+    """Extract a valid image URL from the tweet description."""
+    if not description:
+        return None
+
+    soup = BeautifulSoup(description, "html.parser")
+    
+    # Try to find the main tweet image
+    img_tag = soup.find("img")
+    if img_tag:
+        img_url = img_tag.get("src")
+        if img_url and img_url.startswith("http") and "nitter" not in img_url:
+            return img_url  # Return valid image URL
+
+    # If no image is found, check for Twitter's OpenGraph metadata
+    meta_image = soup.find("meta", property="og:image")
+    if meta_image:
+        return meta_image.get("content")
+
     return None  # No valid image found
 
 
@@ -77,7 +87,7 @@ def get_latest_tweets(username, max_tweets=3):
 
 
 def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_image, tweet_timestamp):
-    """Send new tweet to Discord webhook with improved embed formatting."""
+    """Send new tweet to Discord webhook with correct timestamp."""
     if not webhook_url:
         print(f"⚠️ Skipping @{username}: Webhook URL is missing.")
         return
@@ -122,7 +132,7 @@ def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_
 
 
 def load_last_tweets(username):
-    """Load all previously posted tweet IDs for a specific Twitter user to prevent duplicates."""
+    """Load all previously posted tweet IDs to prevent duplicates."""
     file_path = os.path.join(LAST_TWEETS_DIR, f"{username}.txt")
 
     if os.path.exists(file_path):
