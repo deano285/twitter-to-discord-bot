@@ -6,6 +6,7 @@ import re
 from bs4 import BeautifulSoup
 from datetime import datetime
 from email.utils import parsedate_to_datetime
+from xml.etree import ElementTree
 
 # 📝 Retrieve webhook URLs from environment variables (GitHub Secrets)
 WEBHOOKS = {
@@ -42,7 +43,7 @@ LAST_TWEETS_DIR = "last_tweets"
 os.makedirs(LAST_TWEETS_DIR, exist_ok=True)
 
 
-def extract_image_from_description(description):
+def extract_image_from_description(description, tweet_link=None):
     """Extract a valid image URL from the tweet description using Nitter RSS."""
     if description:
         soup = BeautifulSoup(description, "html.parser")
@@ -84,7 +85,7 @@ def get_latest_tweets(username, max_tweets=3):
                 tweet_link = item.find("link").text
                 tweet_id = tweet_link.split("/")[-1]
                 tweet_description = item.find("description").text
-                tweet_image = extract_image_from_description(tweet_description, tweet_link)
+                tweet_image = extract_image_from_description(tweet_description)
 
                 # Extract actual tweet timestamp
                 tweet_timestamp = item.find("pubDate").text if item.find("pubDate") is not None else None
