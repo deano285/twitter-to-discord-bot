@@ -120,6 +120,12 @@ def get_latest_tweets(username, max_tweets=3):
     return []  # Return empty if all instances fail
 
 
+def clean_tweet_description(description):
+    """Remove HTML tags and unwanted characters from the tweet description."""
+    if description:
+        soup = BeautifulSoup(description, "html.parser")
+        return soup.get_text().strip()  # Extract text only
+    return None
 
 
 
@@ -129,6 +135,7 @@ def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_
         print(f"⚠️ Skipping @{username}: Webhook URL is missing.")
         return
 
+    # ✅ Ensure clean description processing
     clean_description = clean_tweet_description(tweet_description)
 
     embed = {
@@ -166,6 +173,7 @@ def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_
 
     response = requests.post(webhook_url, data=json.dumps(payload), headers=headers)
     return response.status_code
+
 
 
 def load_last_tweets(username):
