@@ -73,7 +73,7 @@ def clean_tweet_description(description):
 
 
 def get_latest_tweets(username, max_tweets=3):
-    """Fetch the latest tweets from a working Nitter instance."""
+    """Fetch the latest tweets from a working Nitter instance and validate XML."""
     nitter_instance = get_working_nitter_instance()
     if not nitter_instance:
         return []  # Skip if no instance is available
@@ -86,6 +86,11 @@ def get_latest_tweets(username, max_tweets=3):
     try:
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
+
+        # ✅ Check if the response is actually XML
+        if not response.text.strip().startswith("<?xml"):
+            print(f"❌ Nitter returned non-XML content for @{username}. Response:\n{response.text[:200]}")
+            return []  # Skip processing if the response is not valid XML
 
         from xml.etree import ElementTree as ET
         root = ET.fromstring(response.text)
@@ -104,8 +109,13 @@ def get_latest_tweets(username, max_tweets=3):
     
     except requests.exceptions.RequestException as e:
         print(f"❌ Error fetching tweets for @{username} using {nitter_instance}: {e}")
+    
+    except ElementTree.ParseError as e:
+        print(f"❌ XML Parse Error for @{username}: {e}")
+        print(f"🚨 Response Content:\n{response.text[:200]}")  # Print first 200 chars of response for debugging
 
     return tweets  # Return multiple tweets
+
 
 
 
