@@ -61,16 +61,29 @@ def get_latest_tweets(username, max_tweets=3):
     return tweets  # Return multiple tweets
 
 
+from bs4 import BeautifulSoup
+
+def clean_tweet_description(description):
+    """Remove HTML tags from the tweet description."""
+    if description:
+        soup = BeautifulSoup(description, "html.parser")
+        return soup.get_text().strip()  # Extract text only
+    return None
+
+
 def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_image):
-    """Send new tweet to the specified Discord webhook as a formatted embed."""
+    """Send new tweet to Discord webhook with better embed formatting."""
     if not webhook_url:  # Skip if webhook is missing
         print(f"⚠️ Skipping @{username}: Webhook URL is missing.")
         return
 
+    # Clean tweet description
+    clean_description = clean_tweet_description(tweet_description)
+
     embed = {
-        "title": f"New Tweet from @{username} 📢",
+        "title": f"📢 New Tweet from @{username}",
         "url": tweet_link,
-        "description": tweet_description if tweet_description else "Click the link to view the tweet!",
+        "description": clean_description if clean_description else "Click the link to view the tweet!",
         "color": 1942002,  # Blue color for embed
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),  # Adds a timestamp
         "footer": {
@@ -79,8 +92,8 @@ def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_
         }
     }
 
-    # Include an image in embed if available
-    if tweet_image:
+    # Include image in embed if available
+    if tweet_image and "nitter" not in tweet_image:  # Ignore Nitter placeholder images
         embed["image"] = {"url": tweet_image}
 
     # Add author field for better formatting
@@ -95,6 +108,7 @@ def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_
 
     response = requests.post(webhook_url, data=json.dumps(payload), headers=headers)
     return response.status_code
+
 
 
 def load_last_tweets(username, count=5):
