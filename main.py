@@ -47,17 +47,17 @@ def extract_image_from_description(description, tweet_link):
     if description:
         soup = BeautifulSoup(description, "html.parser")
         
-        # Try to find an image inside the description
+        # Try to find an image inside the description (from Nitter)
         img_tag = soup.find("img")
         if img_tag:
             img_url = img_tag.get("src")
             if img_url and img_url.startswith("http") and "nitter" not in img_url:
-                return img_url  # Return valid image URL
+                return img_url  # Return valid image URL from Nitter
 
     # ✅ If no image found in RSS, fetch OpenGraph metadata from Twitter directly
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(tweet_link, headers=headers, timeout=5)
+        response = requests.get(tweet_link.replace("nitter.", "twitter."), headers=headers, timeout=5)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, "html.parser")
@@ -73,6 +73,7 @@ def extract_image_from_description(description, tweet_link):
         print(f"⚠️ Failed to fetch OpenGraph image for {tweet_link}: {e}")
 
     return None  # No valid image found
+
 
 
 
@@ -149,12 +150,18 @@ def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_
         }
     }
 
-    # ✅ Ensure valid images before adding
-    if tweet_image:
-        if "nitter" not in tweet_image and tweet_image.startswith("http"):
+# ✅ Ensure valid images before adding
+if tweet_image:
+    try:
+        # Check if the image URL is accessible
+        img_response = requests.get(tweet_image, timeout=5)
+        if img_response.status_code == 200 and tweet_image.startswith("http"):
             embed["image"] = {"url": tweet_image}
         else:
-            print(f"⚠️ Skipping invalid image: {tweet_image}")
+            print(f"⚠️ Image URL is invalid or blocked: {tweet_image}")
+    except requests.exceptions.RequestException:
+        print(f"⚠️ Image could not be loaded: {tweet_image}")
+
 
     # ✅ Use actual tweet timestamp instead of bot run time
     if tweet_timestamp:
