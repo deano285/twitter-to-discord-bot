@@ -174,7 +174,8 @@ def load_last_tweets(username):
 
     if os.path.exists(file_path):
         with open(file_path, "r") as f:
-            return set(f.read().strip().split("\n"))  # Store as a set to prevent duplicates
+            tweet_ids = f.read().strip().split("\n")
+            return set(tweet_ids)  # Ensure unique tweet IDs
 
     return set()  # Return empty set if no history exists
 
@@ -183,9 +184,11 @@ def save_last_tweets(username, tweet_ids):
     """Save all tweet IDs that have been posted to prevent duplicates."""
     file_path = os.path.join(LAST_TWEETS_DIR, f"{username}.txt")
 
+    # Ensure we only keep the latest 50 tweet IDs per user to prevent unnecessary bloat
+    tweet_ids = list(tweet_ids)[-50:]
+
     with open(file_path, "w") as f:
         f.write("\n".join(tweet_ids))  # Store all tweet IDs
-
 
 def main():
     """Main loop to check multiple Twitter accounts and post tweets to grouped webhooks."""
@@ -199,18 +202,23 @@ def main():
                 tweets = get_latest_tweets(username, max_tweets=3)  # Fetch latest 3 tweets
 
                 for tweet_id, tweet_link, tweet_description, tweet_image, tweet_timestamp in reversed(tweets):
-                    if tweet_id and tweet_id not in last_tweet_ids:
-                        print(f"✅ New tweet found for @{username}: {tweet_link}")
-                        status = send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_image, tweet_timestamp)
+                    # ✅ Final check before sending to Discord
+                    if tweet_id and tweet_id in last_tweet_ids:
+                        print(f"⚠️ Skipping duplicate tweet for @{username}: {tweet_link}")
+                        continue  # Skip already posted tweets
 
-                        if status == 204:  # Discord success code
-                            last_tweet_ids.add(tweet_id)
-                            save_last_tweets(username, last_tweet_ids)
-                            print(f"📢 Tweet posted to Discord webhook {webhook_url} for @{username}!")
-                        else:
-                            print(f"⚠️ Failed to post tweet for @{username}. Status Code: {status}")
+                    print(f"✅ New tweet found for @{username}: {tweet_link}")
+                    status = send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_image, tweet_timestamp)
+
+                    if status == 204:  # Discord success code
+                        last_tweet_ids.add(tweet_id)
+                        save_last_tweets(username, last_tweet_ids)
+                        print(f"📢 Tweet posted to Discord webhook {webhook_url} for @{username}!")
+                    else:
+                        print(f"⚠️ Failed to post tweet for @{username}. Status Code: {status}")
 
         time.sleep(60)  # Check every 60 seconds instead of 300
+
 
 
 if __name__ == "__main__":
