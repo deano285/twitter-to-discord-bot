@@ -35,3 +35,4 @@ jobs:
           WEBHOOK_4: ${{ secrets.WEBHOOK_4 }}
           WEBHOOK_5: ${{ secrets.WEBHOOK_5 }}
         run: python main.py
+ 
