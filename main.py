@@ -22,12 +22,15 @@ os.makedirs(LAST_TWEETS_DIR, exist_ok=True)
 
 
 def extract_image_from_description(description):
-    """Extract the first image URL from the tweet description."""
+    """Extract the first image URL from the tweet description, ignoring placeholders."""
     if description:
-        match = re.search(r'<img src="(.*?)"', description)
-        if match:
-            return match.group(1)  # Return the first image URL found
-    return None  # No image found
+        soup = BeautifulSoup(description, "html.parser")
+        img_tag = soup.find("img")
+        if img_tag:
+            img_url = img_tag.get("src")
+            if img_url and "nitter" not in img_url:  # Ignore Nitter placeholders
+                return img_url
+    return None  # No valid image found
 
 
 def get_latest_tweets(username, max_tweets=3):
@@ -72,7 +75,7 @@ def clean_tweet_description(description):
 
 
 def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_image):
-    """Send new tweet to Discord webhook with better embed formatting."""
+    """Send new tweet to Discord webhook with improved embed formatting."""
     if not webhook_url:  # Skip if webhook is missing
         print(f"⚠️ Skipping @{username}: Webhook URL is missing.")
         return
@@ -92,9 +95,12 @@ def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_
         }
     }
 
-    # Include image in embed if available
-    if tweet_image and "nitter" not in tweet_image:  # Ignore Nitter placeholder images
-        embed["image"] = {"url": tweet_image}
+    # 🛠 Ensure image is valid before adding it
+    if tweet_image:
+        if "nitter" not in tweet_image and tweet_image.startswith("http"):
+            embed["image"] = {"url": tweet_image}
+        else:
+            print(f"⚠️ Skipping invalid image: {tweet_image}")
 
     # Add author field for better formatting
     embed["author"] = {
@@ -108,6 +114,7 @@ def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_
 
     response = requests.post(webhook_url, data=json.dumps(payload), headers=headers)
     return response.status_code
+
 
 
 
