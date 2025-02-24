@@ -54,10 +54,13 @@ def extract_image_from_description(description, tweet_link):
             if img_url and img_url.startswith("http") and "nitter" not in img_url:
                 return img_url  # Return valid image URL from Nitter
 
+    # ✅ Convert Nitter URL to a real Twitter URL
+    twitter_link = re.sub(r"https://nitter\.[^/]+/", "https://twitter.com/", tweet_link)
+
     # ✅ If no image found in RSS, fetch OpenGraph metadata from Twitter directly
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(tweet_link.replace("nitter.", "twitter."), headers=headers, timeout=5)
+        response = requests.get(twitter_link, headers=headers, timeout=5)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.text, "html.parser")
@@ -70,9 +73,10 @@ def extract_image_from_description(description, tweet_link):
                 return og_image  # Return Twitter OG image
 
     except requests.exceptions.RequestException as e:
-        print(f"⚠️ Failed to fetch OpenGraph image for {tweet_link}: {e}")
+        print(f"⚠️ Failed to fetch OpenGraph image for {twitter_link}: {e}")
 
     return None  # No valid image found
+
 
 
 
