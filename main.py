@@ -150,13 +150,14 @@ def get_latest_tweets(username, max_tweets=3):
             try:
                 tweet_text = tweet.inner_text()
                 tweet_link = f"https://x.com/{username}/status/{tweet.get_attribute('data-tweet-id')}"
-                
+
                 # ✅ Extract media (image or video)
                 media_element = tweet.locator("img, video").first
                 tweet_image = media_element.get_attribute("src") if media_element else None
 
-                # ✅ Extract timestamp
-                tweet_timestamp = tweet.locator("time").get_attribute("datetime")
+                # ✅ Extract timestamp properly
+                timestamp_element = tweet.locator("time")
+                tweet_timestamp = timestamp_element.get_attribute("datetime") if timestamp_element else None
 
                 tweets.append((tweet_link, tweet_text, tweet_image, tweet_timestamp))
             except Exception as e:
@@ -171,17 +172,21 @@ def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_
     if not webhook_url:
         print(f"⚠️ Skipping @{username}: Webhook URL is missing.")
         return
+
     clean_description = clean_tweet_description(tweet_description)
+
     embed = {
         "title": f"📢 New Tweet from @{username}",
         "url": tweet_link,
         "description": clean_description if clean_description else "Click the link to view the tweet!",
-        "color": 1942002,
+        "color": 1942002,  # Blue color for embed
         "footer": {
             "text": f"Follow @{username} for more updates!",
             "icon_url": "https://abs.twimg.com/icons/apple-touch-icon-192x192.png"
         }
     }
+
+    # ✅ Ensure valid images before adding
     if tweet_image:
         try:
             img_response = requests.get(tweet_image, timeout=5)
@@ -191,16 +196,25 @@ def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_
                 print(f"⚠️ Image URL is invalid or blocked: {tweet_image}")
         except requests.exceptions.RequestException:
             print(f"⚠️ Image could not be loaded: {tweet_image}")
+
+    # ✅ Check if timestamp is valid before parsing
     if tweet_timestamp:
-        parsed_time = parsedate_to_datetime(tweet_timestamp)
-        embed["timestamp"] = parsed_time.isoformat()
+        try:
+            parsed_time = parsedate_to_datetime(tweet_timestamp)
+            embed["timestamp"] = parsed_time.isoformat()
+        except Exception as e:
+            print(f"⚠️ Failed to parse tweet timestamp for {username}: {e}")
+
+    # ✅ Add author field for better formatting
     embed["author"] = {
         "name": f"@{username}",
         "url": f"https://twitter.com/{username}",
         "icon_url": "https://abs.twimg.com/icons/apple-touch-icon-192x192.png"
     }
+
     payload = {"embeds": [embed]}
     headers = {"Content-Type": "application/json"}
+
     response = requests.post(webhook_url, data=json.dumps(payload), headers=headers)
     return response.status_code
 
