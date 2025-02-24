@@ -42,39 +42,22 @@ LAST_TWEETS_DIR = "last_tweets"
 os.makedirs(LAST_TWEETS_DIR, exist_ok=True)
 
 
-def extract_image_from_description(description, tweet_link):
-    """Extract a valid image URL from the tweet description or Twitter OpenGraph metadata."""
+def extract_image_from_description(description):
+    """Extract a valid image URL from the tweet description using Nitter first, then OpenGraph as a fallback."""
     if description:
         soup = BeautifulSoup(description, "html.parser")
-        
-        # Try to find an image inside the description (from Nitter)
+
+        # ✅ Try to find an image inside the description (from Nitter RSS)
         img_tag = soup.find("img")
         if img_tag:
             img_url = img_tag.get("src")
             if img_url and img_url.startswith("http") and "nitter" not in img_url:
+                print(f"✅ Extracted Nitter RSS image: {img_url}")
                 return img_url  # Return valid image URL from Nitter
 
-    # ✅ Convert Nitter URL to a real Twitter (X) URL and clean it
-    twitter_link = re.sub(r"https://nitter\.[^/]+/", "https://x.com/", tweet_link)
-    twitter_link = twitter_link.split("#")[0]  # Remove `#m` or any fragment
-
-    # ✅ Fetch OpenGraph metadata from Twitter (X)
-    try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-            "Accept-Language": "en-US,en;q=0.9"
-        }
-        response = requests.get(twitter_link, headers=headers, timeout=5)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.text, "html.parser")
-        meta_image = soup.find("meta", property="og:image")
-
-        if meta_image:
-            og_image = meta_image.get("content")
-            if og_image and og_image.startswith("http"):
-                print(f"✅ Extracted OpenGraph image: {og_image}")
-                return og_image  # Return Twitter OG image
+    # ❌ If no image is found in RSS, fallback to OpenGraph (might be blocked)
+    print("⚠️ No image found in Nitter RSS, attempting OpenGraph...")
+    return None  # Fallback to OpenGraph if implemented elsewhere
 
     except requests.exceptions.RequestException as e:
         print(f"⚠️ Failed to fetch OpenGraph image for {twitter_link}: {e}")
