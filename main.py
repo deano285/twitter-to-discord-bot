@@ -43,7 +43,7 @@ os.makedirs(LAST_TWEETS_DIR, exist_ok=True)
 
 
 def extract_image_from_description(description):
-    """Extract a valid image URL from the tweet description using Nitter first, then OpenGraph as a fallback."""
+    """Extract a valid image URL from the tweet description using Nitter RSS."""
     if description:
         soup = BeautifulSoup(description, "html.parser")
 
@@ -55,17 +55,9 @@ def extract_image_from_description(description):
                 print(f"✅ Extracted Nitter RSS image: {img_url}")
                 return img_url  # Return valid image URL from Nitter
 
-    # ❌ If no image is found in RSS, fallback to OpenGraph (might be blocked)
-    print("⚠️ No image found in Nitter RSS, attempting OpenGraph...")
-    return None  # Fallback to OpenGraph if implemented elsewhere
-
-    except requests.exceptions.RequestException as e:
-        print(f"⚠️ Failed to fetch OpenGraph image for {twitter_link}: {e}")
-
+    # ❌ No image found in RSS
+    print("⚠️ No image found in Nitter RSS.")
     return None  # No valid image found
-
-
-
 
 
 def get_latest_tweets(username, max_tweets=3):
