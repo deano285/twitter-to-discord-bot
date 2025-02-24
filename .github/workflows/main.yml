@@ -5,19 +5,22 @@ on:
     - cron: '*/5 * * * *'  # Runs every 5 minutes
   workflow_dispatch:  # Allows manual triggering
 
+permissions:
+  actions: write  # Grants permission to cancel previous runs
+
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    concurrency: 
-      group: twitter-to-discord-bot  # Ensures only one workflow runs at a time
-      cancel-in-progress: true  # Cancels any running jobs when a new one starts
+    concurrency:
+      group: twitter-to-discord-bot
+      cancel-in-progress: true  # Ensures only one instance runs at a time
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set Up Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
@@ -31,5 +34,4 @@ jobs:
           WEBHOOK_3: ${{ secrets.WEBHOOK_3 }}
           WEBHOOK_4: ${{ secrets.WEBHOOK_4 }}
           WEBHOOK_5: ${{ secrets.WEBHOOK_5 }}
-        run: |
-          python main.py
+        run: python main.py
