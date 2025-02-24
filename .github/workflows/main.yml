@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: twitter-to-discord-bot
-      cancel-in-progress: true  # Ensures only one instance runs at a time
+      cancel-in-progress: true  # Ensures only one workflow runs at a time
 
     steps:
       - name: Checkout Repository
