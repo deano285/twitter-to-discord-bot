@@ -150,18 +150,17 @@ def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_
         }
     }
 
-# ✅ Ensure valid images before adding
-if tweet_image:
-    try:
-        # Check if the image URL is accessible
-        img_response = requests.get(tweet_image, timeout=5)
-        if img_response.status_code == 200 and tweet_image.startswith("http"):
-            embed["image"] = {"url": tweet_image}
-        else:
-            print(f"⚠️ Image URL is invalid or blocked: {tweet_image}")
-    except requests.exceptions.RequestException:
-        print(f"⚠️ Image could not be loaded: {tweet_image}")
-
+    # ✅ Ensure valid images before adding
+    if tweet_image:
+        try:
+            # Check if the image URL is accessible
+            img_response = requests.get(tweet_image, timeout=5)
+            if img_response.status_code == 200 and tweet_image.startswith("http"):
+                embed["image"] = {"url": tweet_image}
+            else:
+                print(f"⚠️ Image URL is invalid or blocked: {tweet_image}")
+        except requests.exceptions.RequestException:
+            print(f"⚠️ Image could not be loaded: {tweet_image}")
 
     # ✅ Use actual tweet timestamp instead of bot run time
     if tweet_timestamp:
@@ -179,7 +178,8 @@ if tweet_image:
     headers = {"Content-Type": "application/json"}
 
     response = requests.post(webhook_url, data=json.dumps(payload), headers=headers)
-    return response.status_code
+
+    return response.status_code  # ✅ Ensure return is inside the function
 
 
 
