@@ -42,34 +42,38 @@ LAST_TWEETS_DIR = "last_tweets"
 os.makedirs(LAST_TWEETS_DIR, exist_ok=True)
 
 
-def extract_image_from_description(description):
-    """Extract a valid image URL from the tweet description."""
-    if not description:
-        return None
+def extract_image_from_description(description, tweet_link):
+    """Extract a valid image URL from the tweet description or Twitter metadata."""
+    if description:
+        soup = BeautifulSoup(description, "html.parser")
+        
+        # Try to find an image inside the description
+        img_tag = soup.find("img")
+        if img_tag:
+            img_url = img_tag.get("src")
+            if img_url and img_url.startswith("http") and "nitter" not in img_url:
+                return img_url  # Return valid image URL
 
-    soup = BeautifulSoup(description, "html.parser")
-    
-    # Try to find the main tweet image
-    img_tag = soup.find("img")
-    if img_tag:
-        img_url = img_tag.get("src")
-        if img_url and img_url.startswith("http") and "nitter" not in img_url:
-            return img_url  # Return valid image URL
+    # ✅ If no image found in RSS, fetch OpenGraph metadata from Twitter directly
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(tweet_link, headers=headers, timeout=5)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, "html.parser")
+        meta_image = soup.find("meta", property="og:image")
 
-    # If no image is found, check for Twitter's OpenGraph metadata
-    meta_image = soup.find("meta", property="og:image")
-    if meta_image:
-        return meta_image.get("content")
+        if meta_image:
+            og_image = meta_image.get("content")
+            if og_image and og_image.startswith("http"):
+                print(f"✅ Extracted OpenGraph image: {og_image}")
+                return og_image  # Return Twitter OG image
+
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️ Failed to fetch OpenGraph image for {tweet_link}: {e}")
 
     return None  # No valid image found
 
-
-def clean_tweet_description(description):
-    """Remove HTML tags from the tweet description."""
-    if description:
-        soup = BeautifulSoup(description, "html.parser")
-        return soup.get_text().strip()  # Extract text only
-    return None
 
 
 def get_latest_tweets(username, max_tweets=3):
@@ -96,7 +100,7 @@ def get_latest_tweets(username, max_tweets=3):
                 tweet_link = item.find("link").text
                 tweet_id = tweet_link.split("/")[-1]
                 tweet_description = item.find("description").text
-                tweet_image = extract_image_from_description(tweet_description)
+                tweet_image = extract_image_from_description(tweet_description, tweet_link)
 
                 # Extract actual tweet timestamp
                 tweet_timestamp = item.find("pubDate").text if item.find("pubDate") is not None else None
