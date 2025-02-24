@@ -21,6 +21,15 @@ LAST_TWEETS_DIR = "last_tweets"
 os.makedirs(LAST_TWEETS_DIR, exist_ok=True)
 
 
+def extract_image_from_description(description):
+    """Extract the first image URL from the tweet description."""
+    if description:
+        match = re.search(r'<img src="(.*?)"', description)
+        if match:
+            return match.group(1)  # Return the first image URL found
+    return None  # No image found
+
+
 def get_latest_tweets(username, max_tweets=3):
     """Fetch the latest tweets from Nitter RSS (up to max_tweets)."""
     url = f"{NITTER_INSTANCE}/{username}/rss"
@@ -50,6 +59,7 @@ def get_latest_tweets(username, max_tweets=3):
         print(f"❌ Error fetching tweets for @{username}: {e}")
 
     return tweets  # Return multiple tweets
+
 
 
 def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_image):
