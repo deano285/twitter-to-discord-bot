@@ -129,34 +129,41 @@ def clean_tweet_description(description):
     return None
 
 
-def get_latest_tweets(username, max_tweets=3):
-    """Fetch the latest tweets from a working Nitter instance and extract timestamps."""
-    working_instance = get_working_nitter_instance(username)
-    if not working_instance:
-        return []  # Skip if no instance is available
+from playwright.sync_api import sync_playwright
+import time
 
-    url = f"{working_instance}/{username}/rss"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    tweets = []
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        root = ElementTree.fromstring(response.text)
-        items = root.findall(".//item")[:max_tweets]
-        for item in items:
-            tweet_link = item.find("link").text
-            tweet_id = tweet_link.split("/")[-1]
-            tweet_description = item.find("description").text
-            # Pass both description and tweet_link to extract media
-            tweet_image = extract_image_from_description(tweet_description, tweet_link)
-            tweet_timestamp = item.find("pubDate").text if item.find("pubDate") is not None else None
-            tweets.append((tweet_id, tweet_link, tweet_description, tweet_image, tweet_timestamp))
-        print(f"✅ Successfully fetched tweets from {working_instance} for @{username}")
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Error fetching tweets for @{username} using {working_instance}: {e}")
-    except ElementTree.ParseError as e:
-        print(f"❌ XML Parse Error for @{username}: {e}")
-    return tweets
+def get_latest_tweets(username, max_tweets=3):
+    """Fetch the latest tweets from Twitter/X using Playwright."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)  # ✅ Run in headless mode
+        page = browser.new_page()
+        page.goto(f"https://x.com/{username}")
+
+        # ✅ Wait for tweets to load
+        page.wait_for_selector('article', timeout=10000)
+
+        # ✅ Extract tweet elements
+        tweet_elements = page.locator('article').all()
+        tweets = []
+
+        for tweet in tweet_elements[:max_tweets]:  # ✅ Limit tweets
+            try:
+                tweet_text = tweet.inner_text()
+                tweet_link = f"https://x.com/{username}/status/{tweet.get_attribute('data-tweet-id')}"
+                
+                # ✅ Extract media (image or video)
+                media_element = tweet.locator("img, video").first
+                tweet_image = media_element.get_attribute("src") if media_element else None
+
+                # ✅ Extract timestamp
+                tweet_timestamp = tweet.locator("time").get_attribute("datetime")
+
+                tweets.append((tweet_link, tweet_text, tweet_image, tweet_timestamp))
+            except Exception as e:
+                print(f"⚠️ Error extracting tweet data: {e}")
+
+        browser.close()
+        return tweets  # ✅ Return extracted tweets
 
 
 def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_image, tweet_timestamp):
@@ -225,30 +232,19 @@ def main():
     """Main loop to check multiple Twitter accounts and post tweets to grouped webhooks."""
     while True:
         for webhook_url, usernames in WEBHOOKS.items():
-            if not webhook_url:  # Skip if webhook is empty
+            if not webhook_url:
                 continue
 
             for username in usernames:
-                last_tweet_ids = load_last_tweets(username)  # Load all posted tweets
-                tweets = get_latest_tweets(username, max_tweets=3)  # Fetch latest 3 tweets
+                tweets = get_latest_tweets(username, max_tweets=3)
 
-                for tweet_id, tweet_link, tweet_description, tweet_image, tweet_timestamp in reversed(tweets):
-                    # ✅ Final duplicate check before posting
-                    if tweet_id in last_tweet_ids:
-                        print(f"⚠️ Skipping duplicate tweet for @{username}: {tweet_link}")
-                        continue  # Skip already posted tweets
-
+                for tweet_link, tweet_text, tweet_image, tweet_timestamp in tweets:
                     print(f"✅ New tweet found for @{username}: {tweet_link}")
-                    status = send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_image, tweet_timestamp)
 
-                    if status == 204:  # Discord success code
-                        last_tweet_ids.add(tweet_id)
-                        save_last_tweets(username, last_tweet_ids)  # ✅ Save tweet immediately after posting
-                        print(f"📢 Tweet posted to Discord webhook {webhook_url} for @{username}!")
-                    else:
-                        print(f"⚠️ Failed to post tweet for @{username}. Status Code: {status}")
+                    # ✅ Send tweet to Discord
+                    send_to_discord(webhook_url, username, tweet_link, tweet_text, tweet_image, tweet_timestamp)
 
-        time.sleep(60)  # Check every 60 seconds
+        time.sleep(300)  # ✅ Check every 5 minutes
 
 
 
