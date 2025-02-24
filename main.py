@@ -43,7 +43,7 @@ os.makedirs(LAST_TWEETS_DIR, exist_ok=True)
 
 
 def extract_image_from_description(description, tweet_link):
-    """Extract a valid image URL from the tweet description or Twitter metadata."""
+    """Extract a valid image URL from the tweet description or Twitter OpenGraph metadata."""
     if description:
         soup = BeautifulSoup(description, "html.parser")
         
@@ -54,12 +54,16 @@ def extract_image_from_description(description, tweet_link):
             if img_url and img_url.startswith("http") and "nitter" not in img_url:
                 return img_url  # Return valid image URL from Nitter
 
-    # ✅ Convert Nitter URL to a real Twitter URL
-    twitter_link = re.sub(r"https://nitter\.[^/]+/", "https://twitter.com/", tweet_link)
+    # ✅ Convert Nitter URL to a real Twitter (X) URL and clean it
+    twitter_link = re.sub(r"https://nitter\.[^/]+/", "https://x.com/", tweet_link)
+    twitter_link = twitter_link.split("#")[0]  # Remove `#m` or any fragment
 
-    # ✅ If no image found in RSS, fetch OpenGraph metadata from Twitter directly
+    # ✅ Fetch OpenGraph metadata from Twitter (X)
     try:
-        headers = {"User-Agent": "Mozilla/5.0"}
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9"
+        }
         response = requests.get(twitter_link, headers=headers, timeout=5)
         response.raise_for_status()
         
