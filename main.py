@@ -61,7 +61,6 @@ def get_latest_tweets(username, max_tweets=3):
     return tweets  # Return multiple tweets
 
 
-
 def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_image):
     """Send new tweet to the specified Discord webhook as a formatted embed."""
     if not webhook_url:  # Skip if webhook is missing
@@ -98,22 +97,23 @@ def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_
     return response.status_code
 
 
-def load_last_tweet(username):
-    """Load the last tweet ID for a specific Twitter user."""
+def load_last_tweets(username, count=5):
+    """Load the last N tweet IDs for a specific Twitter user to prevent duplicates."""
     file_path = os.path.join(LAST_TWEETS_DIR, f"{username}.txt")
 
     if os.path.exists(file_path):
         with open(file_path, "r") as f:
-            return f.read().strip()
-    return None
+            return f.read().strip().split("\n")[:count]  # Return up to last N tweet IDs
+
+    return []  # Return an empty list if no history exists
 
 
-def save_last_tweet(username, tweet_id):
-    """Save the last tweet ID for a specific Twitter user."""
+def save_last_tweets(username, tweet_ids, count=5):
+    """Save the last N tweet IDs for a specific Twitter user."""
     file_path = os.path.join(LAST_TWEETS_DIR, f"{username}.txt")
 
     with open(file_path, "w") as f:
-        f.write(tweet_id)
+        f.write("\n".join(tweet_ids[:count]))  # Keep only the last N tweet IDs
 
 
 def main():
@@ -124,25 +124,27 @@ def main():
                 continue
 
             for username in usernames:
-                last_tweet_id = load_last_tweet(username)
+                last_tweet_ids = load_last_tweets(username)  # Load last few tweets
                 tweets = get_latest_tweets(username, max_tweets=3)  # Fetch latest 3 tweets
 
+                new_tweet_ids = []  # Track new tweets posted
+                
                 for tweet_id, tweet_link, tweet_description, tweet_image in reversed(tweets):
-                    if tweet_id and tweet_id != last_tweet_id:
+                    if tweet_id and tweet_id not in last_tweet_ids:
                         print(f"✅ New tweet found for @{username}: {tweet_link}")
                         status = send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_image)
 
                         if status == 204:  # Discord success code
-                            save_last_tweet(username, tweet_id)
+                            new_tweet_ids.append(tweet_id)
                             print(f"📢 Tweet posted to Discord webhook {webhook_url} for @{username}!")
                         else:
                             print(f"⚠️ Failed to post tweet for @{username}. Status Code: {status}")
 
-                    else:
-                        print(f"🔄 No new tweets for @{username}. Skipping...")
+                # Save the new last tweets while keeping history
+                if new_tweet_ids:
+                    save_last_tweets(username, new_tweet_ids + last_tweet_ids)  # Keep newest + old ones
 
         time.sleep(60)  # Check every 60 seconds instead of 300
-
 
 
 if __name__ == "__main__":
