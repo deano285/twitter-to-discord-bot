@@ -6,14 +6,14 @@ on:
   workflow_dispatch:  # Allows manual triggering
 
 permissions:
-  actions: write  # Grants permission to cancel previous runs
+  actions: write
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     concurrency:
       group: twitter-to-discord-bot
-      cancel-in-progress: true  # Ensures only one workflow runs at a time
+      cancel-in-progress: true
 
     steps:
       - name: Checkout Repository
@@ -25,7 +25,10 @@ jobs:
           python-version: '3.9'
 
       - name: Install Dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          pip install playwright
+          playwright install --with-deps  # ✅ Install required browsers
 
       - name: Run Bot
         env:
@@ -35,4 +38,3 @@ jobs:
           WEBHOOK_4: ${{ secrets.WEBHOOK_4 }}
           WEBHOOK_5: ${{ secrets.WEBHOOK_5 }}
         run: python main.py
- 
