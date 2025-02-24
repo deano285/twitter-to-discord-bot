@@ -4,21 +4,16 @@ import time
 import os
 import re
 
-# 📝 Define Twitter usernames and their corresponding Discord webhook URLs
+# 📝 Retrieve webhook URLs from environment variables (GitHub Secrets)
 WEBHOOKS = {
-    "https://discord.com/api/webhooks/1343609560451121182/DqRWFgzXNgP8SRPQBN52sCiXPIX9SGLeEM9Pep7kcoSfsy3oGlTEp9ZTWk2b5v8jtFFe":
-    ["RoyaleAPI", "ClashRoyale"],
-    "https://discord.com/api/webhooks/1342959860031164437/F9NaAlLB4lyMwhoj_2Xv_LhBrwaAXkc-Fd_0CPHEtRdoN7iC5D7owqsqp7HxcavIUpvR":
-    ["PokemonGoApp", "LeekDuck", "PokemonGOHubNet", "PokemonSleep"],
-    "https://discord.com/api/webhooks/1343616872414711969/OOMUlbwFtJo_0X1kMzpyR5TgNznfo0Vqa_zRC5JdSBfRRybf1bZZBm9r12SUeGSHfmcD":
-    ["FortniteStatus", "FNCompetitive", "HYPEX"],
-    "https://discord.com/api/webhooks/1343617231115911169/f4fSU046HaMu4jX7EAIIFiaexxHpeqfKwwNw_6JYj_CFWHSpjy5v45cK-DGDl4vdGsHJ":
-    ["survivetheark", "ARKAscendedNews"],
-    "https://discord.com/api/webhooks/1343617417431224460/7PCAt2qucqzhmQJMMN37ImQRaxX336XuWgM9ZFSuomLS2iIT2kinx6e8uVXMHx3DZsSN":
-    ["NWGameStatus", "playnewworld"],
+    os.getenv("WEBHOOK_1"): ["RoyaleAPI", "ClashRoyale"],
+    os.getenv("WEBHOOK_2"): ["PokemonGoApp", "LeekDuck", "PokemonGOHubNet", "PokemonSleep"],
+    os.getenv("WEBHOOK_3"): ["FortniteStatus", "FNCompetitive", "HYPEX"],
+    os.getenv("WEBHOOK_4"): ["survivetheark", "ARKAscendedNews"],
+    os.getenv("WEBHOOK_5"): ["NWGameStatus", "playnewworld"],
 }
 
-# ✅ Change to a working Nitter instance (or RSS-Bridge)
+# ✅ Use a stable Nitter instance
 NITTER_INSTANCE = "https://nitter.privacydev.net"
 
 # 📁 Directory to store last tweet IDs
@@ -28,8 +23,7 @@ os.makedirs(LAST_TWEETS_DIR, exist_ok=True)
 
 def get_latest_tweet(username):
     """Fetch the latest tweet from Nitter RSS."""
-    url = f"{NITTER_INSTANCE}/?action=display&bridge=Twitter&context=By+username&u={username}&format=Atom"
-
+    url = f"{NITTER_INSTANCE}/{username}/rss"
     headers = {"User-Agent": "Mozilla/5.0"}
 
     try:
@@ -64,19 +58,20 @@ def extract_image_from_description(description):
     return None  # No image found
 
 
-def send_to_discord(webhook_url, username, tweet_link, tweet_description,
-                    tweet_image):
+def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_image):
     """Send new tweet to the specified Discord webhook as an embed."""
+    if not webhook_url:  # Skip if webhook is missing
+        print(f"⚠️ Skipping @{username}: Webhook URL is missing.")
+        return
+
     embed = {
         "title": f"New Tweet from @{username}",
         "url": tweet_link,
-        "description":
-        tweet_description if tweet_description else "Click to view the tweet!",
+        "description": tweet_description if tweet_description else "Click to view the tweet!",
         "color": 1942002,  # Blue color for embed
         "footer": {
             "text": f"Follow @{username} on Twitter",
-            "icon_url":
-            "https://abs.twimg.com/icons/apple-touch-icon-192x192.png"
+            "icon_url": "https://abs.twimg.com/icons/apple-touch-icon-192x192.png"
         }
     }
 
@@ -87,9 +82,7 @@ def send_to_discord(webhook_url, username, tweet_link, tweet_description,
     payload = {"embeds": [embed]}
     headers = {"Content-Type": "application/json"}
 
-    response = requests.post(webhook_url,
-                             data=json.dumps(payload),
-                             headers=headers)
+    response = requests.post(webhook_url, data=json.dumps(payload), headers=headers)
     return response.status_code
 
 
@@ -115,32 +108,26 @@ def main():
     """Main loop to check multiple Twitter accounts and post tweets to grouped webhooks."""
     while True:
         for webhook_url, usernames in WEBHOOKS.items():
+            if not webhook_url:  # Skip if webhook is empty
+                continue
+
             for username in usernames:
                 last_tweet_id = load_last_tweet(username)
-                tweet_id, tweet_link, tweet_description, tweet_image = get_latest_tweet(
-                    username)
+                tweet_id, tweet_link, tweet_description, tweet_image = get_latest_tweet(username)
 
                 if tweet_id and tweet_id != last_tweet_id:
                     print(f"✅ New tweet found for @{username}: {tweet_link}")
-                    status = send_to_discord(webhook_url, username, tweet_link,
-                                             tweet_description, tweet_image)
+                    status = send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_image)
 
                     if status == 204:  # Discord success code
                         save_last_tweet(username, tweet_id)
-                        print(
-                            f"📢 Tweet posted to Discord webhook {webhook_url} for @{username}!"
-                        )
+                        print(f"📢 Tweet posted to Discord webhook {webhook_url} for @{username}!")
                     else:
-                        print(
-                            f"⚠️ Failed to post tweet for @{username}. Status Code: {status}"
-                        )
-
+                        print(f"⚠️ Failed to post tweet for @{username}. Status Code: {status}")
                 else:
-                    print(
-                        f"🔄 No new tweets for @{username}. Checking again soon."
-                    )
+                    print(f"🔄 No new tweets for @{username}. Checking again soon.")
 
-        time.sleep(60)  # Wait 60 seconds before checking again
+        time.sleep(300)  # Wait 5 minutes before checking again
 
 
 if __name__ == "__main__":
