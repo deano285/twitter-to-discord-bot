@@ -142,6 +142,11 @@ def get_latest_tweets(username, max_tweets=3):
         # ✅ Wait for tweets to load
         page.wait_for_selector('article', timeout=10000)
 
+        # ✅ Scroll down to load more tweets
+        for _ in range(3):  # Scroll 3 times to load recent tweets
+            page.keyboard.press("PageDown")
+            time.sleep(2)  # Give time for new tweets to load
+
         # ✅ Extract tweet elements
         tweet_elements = page.locator('article').all()
         tweets = []
@@ -152,8 +157,15 @@ def get_latest_tweets(username, max_tweets=3):
                 tweet_link = f"https://x.com/{username}/status/{tweet.get_attribute('data-tweet-id')}"
 
                 # ✅ Extract media (image or video)
-                media_element = tweet.locator("img, video").first
-                tweet_image = media_element.get_attribute("src") if media_element else None
+                # ✅ Extract images and videos properly
+image_element = tweet.locator("img").first
+video_element = tweet.locator("video source").first
+
+tweet_image = image_element.get_attribute("src") if image_element else None
+tweet_video = video_element.get_attribute("src") if video_element else None
+
+# ✅ If there's a video, prioritize video over image
+tweet_media = tweet_video if tweet_video else tweet_image
 
                 # ✅ Extract timestamp properly
                 timestamp_element = tweet.locator("time")
