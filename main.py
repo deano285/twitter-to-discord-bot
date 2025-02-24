@@ -73,48 +73,48 @@ def clean_tweet_description(description):
 
 
 def get_latest_tweets(username, max_tweets=3):
-    """Fetch the latest tweets from a working Nitter instance and validate XML."""
-    nitter_instance = get_working_nitter_instance()
-    if not nitter_instance:
-        return []  # Skip if no instance is available
+    """Fetch the latest tweets from a working Nitter instance and retry if needed."""
+    for nitter_instance in NITTER_INSTANCES:
+        url = f"{nitter_instance}/{username}/rss"
+        headers = {"User-Agent": "Mozilla/5.0"}
 
-    url = f"{nitter_instance}/{username}/rss"
-    headers = {"User-Agent": "Mozilla/5.0"}
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
 
-    tweets = []
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
+            # ✅ Check if the response is actually XML (not an error page)
+            if not response.text.strip().startswith("<?xml"):
+                print(f"❌ Nitter instance {nitter_instance} returned non-XML content for @{username}. Trying next instance...")
+                continue  # Skip this instance and try the next one
 
-        # ✅ Check if the response is actually XML
-        if not response.text.strip().startswith("<?xml"):
-            print(f"❌ Nitter returned non-XML content for @{username}. Response:\n{response.text[:200]}")
-            return []  # Skip processing if the response is not valid XML
+            from xml.etree import ElementTree as ET
+            root = ET.fromstring(response.text)
+            items = root.findall(".//item")[:max_tweets]  # Get latest max_tweets
 
-        from xml.etree import ElementTree as ET
-        root = ET.fromstring(response.text)
-        items = root.findall(".//item")[:max_tweets]  # Get latest max_tweets
+            tweets = []
+            for item in items:
+                tweet_link = item.find("link").text
+                tweet_id = tweet_link.split("/")[-1]
+                tweet_description = item.find("description").text
+                tweet_image = extract_image_from_description(tweet_description)
 
-        for item in items:
-            tweet_link = item.find("link").text
-            tweet_id = tweet_link.split("/")[-1]
-            tweet_description = item.find("description").text
-            tweet_image = extract_image_from_description(tweet_description)
+                # Extract actual tweet timestamp
+                tweet_timestamp = item.find("pubDate").text if item.find("pubDate") is not None else None
 
-            # Extract actual tweet timestamp
-            tweet_timestamp = item.find("pubDate").text if item.find("pubDate") is not None else None
+                tweets.append((tweet_id, tweet_link, tweet_description, tweet_image, tweet_timestamp))
 
-            tweets.append((tweet_id, tweet_link, tweet_description, tweet_image, tweet_timestamp))
-    
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Error fetching tweets for @{username} using {nitter_instance}: {e}")
-    
-    except ElementTree.ParseError as e:
-        print(f"❌ XML Parse Error for @{username}: {e}")
-        print(f"🚨 Response Content:\n{response.text[:200]}")  # Print first 200 chars of response for debugging
+            print(f"✅ Successfully fetched tweets from {nitter_instance} for @{username}")
+            return tweets  # Return tweets if we found a working instance
 
-    return tweets  # Return multiple tweets
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Error with Nitter instance {nitter_instance} for @{username}: {e}. Trying next instance...")
+        
+        except ElementTree.ParseError as e:
+            print(f"❌ XML Parse Error for @{username} on {nitter_instance}: {e}. Trying next instance...")
+
+    print(f"🚨 All Nitter instances failed for @{username}. Skipping...")
+    return []  # Return empty if all instances fail
+
 
 
 
