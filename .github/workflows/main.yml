@@ -2,7 +2,7 @@ name: Run Twitter-to-Discord Bot
 
 on:
   schedule:
-    - cron: '*/5 * * * *'  # Runs every 5 minutes
+    - cron: '*/10 * * * *'  # Runs every 10 minutes
   workflow_dispatch:  # Allows manual triggering
 
 permissions:
@@ -11,11 +11,6 @@ permissions:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-
-    # ✅ Ensure concurrency is correctly placed inside 'jobs'
-    concurrency:
-      group: twitter-to-discord-bot
-      cancel-in-progress: false  # Ensures current job isn't canceled
 
     steps:
       - name: Checkout Repository
@@ -26,11 +21,10 @@ jobs:
         with:
           python-version: '3.9'
 
-- name: Install Dependencies
-  run: |
-    pip install -r requirements.txt
-    pip install snscrape
-
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install snscrape
 
       - name: Run Bot
         env:
