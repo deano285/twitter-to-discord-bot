@@ -21,41 +21,53 @@ LAST_TWEETS_DIR = "last_tweets"
 os.makedirs(LAST_TWEETS_DIR, exist_ok=True)
 
 
+from playwright.sync_api import sync_playwright
+import time
+from email.utils import parsedate_to_datetime
+from datetime import datetime
+
 def get_tweets_from_x(username, max_tweets=3):
-    """Fetch the latest tweets from Twitter/X using Playwright with detailed debugging."""
+    """Fetch the latest tweets from Twitter/X using Playwright with improved selectors."""
     tweet_data = []
     twitter_url = f"https://twitter.com/{username}"
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)  # Run in headless mode for GitHub Actions
+        browser = p.chromium.launch(headless=True)  # Use headless mode for GitHub
         page = browser.new_page()
         page.goto(twitter_url, timeout=15000)
-        time.sleep(5)  # Allow tweets to load
 
-        # ✅ Scroll down multiple times to ensure fresh tweets load
-        for _ in range(5):
-            page.keyboard.press("End")
-            time.sleep(2)
+        # ✅ Scroll multiple times to ensure fresh tweets load
+        for _ in range(5):  
+            page.keyboard.press("End")  
+            time.sleep(3)  
 
-        tweets = page.locator("article").all()
+        # ✅ Wait for tweets to load
+        try:
+            page.wait_for_selector('article [data-testid="tweet"]', timeout=5000)
+        except:
+            print(f"❌ No tweets found for @{username}. Twitter may have changed its layout.")
+            browser.close()
+            return []
+
+        tweets = page.locator('article').all()
         print(f"🟢 Found {len(tweets)} tweets for @{username}")
 
         if not tweets:
-            print(f"❌ No tweets found for @{username}. Twitter may have changed its layout.")
+            print(f"❌ No tweets extracted for @{username}.")
             browser.close()
             return []
 
         for tweet in tweets[:max_tweets]:
             try:
-                # ✅ Debug: Print raw tweet structure
-                print(f"🔎 Raw tweet HTML: {tweet.inner_html()}")
+                # ✅ Locate tweet ID safely
+                tweet_id_element = tweet.locator('a[href*="/status/"]').first
+                tweet_id = tweet_id_element.get_attribute("href").split("/")[-1] if tweet_id_element else None
 
-                tweet_id_element = tweet.get_attribute("data-testid")
-                if not tweet_id_element:
+                if not tweet_id:
                     print(f"⚠️ Skipping tweet: No tweet ID found for @{username}")
                     continue
 
-                tweet_link = f"https://twitter.com/{username}/status/{tweet_id_element}"
+                tweet_link = f"https://twitter.com/{username}/status/{tweet_id}"
 
                 # ✅ Extract tweet text safely
                 tweet_text_element = tweet.locator("div[lang]").first
@@ -88,7 +100,7 @@ def get_tweets_from_x(username, max_tweets=3):
                 print(f"⏳ Timestamp: {tweet_timestamp}")
 
                 tweet_data.append({
-                    "tweet_id": tweet_id_element,
+                    "tweet_id": tweet_id,
                     "tweet_link": tweet_link,
                     "tweet_text": tweet_text,
                     "tweet_images": tweet_images,
