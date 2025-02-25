@@ -11,9 +11,10 @@ permissions:
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    concurrency:
-      group: twitter-to-discord-bot
-      cancel-in-progress: true  # Ensures only one workflow runs at a time
+concurrency:
+  group: twitter-to-discord-bot
+  cancel-in-progress: false  # Ensures current run is not interrupted
+
 
     steps:
       - name: Checkout Repository
