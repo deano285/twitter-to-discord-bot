@@ -26,95 +26,23 @@ import time
 from email.utils import parsedate_to_datetime
 from datetime import datetime
 
+import snscrape.modules.twitter as sntwitter
+
 def get_tweets_from_x(username, max_tweets=3):
-    """Fetch the latest tweets from Twitter/X using Playwright with improved error handling."""
+    """Fetch the latest tweets from Twitter/X using snscrape."""
     tweet_data = []
-    twitter_url = f"https://twitter.com/{username}"
+    for i, tweet in enumerate(sntwitter.TwitterUserScraper(username).get_items()):
+        if i >= max_tweets:
+            break
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)  # Run in headless mode for GitHub
-        page = browser.new_page()
-        
-        try:
-            page.goto(twitter_url, timeout=20000)  # Increase timeout
-        except:
-            print(f"❌ Failed to load Twitter page for @{username}. Retrying...")
-            page.reload()
-
-        # ✅ Scroll multiple times to ensure fresh tweets load
-        for _ in range(5):  
-            page.keyboard.press("End")  
-            time.sleep(3)
-
-        # ✅ Ensure Playwright doesn't get stuck waiting
-        try:
-            page.wait_for_selector('article [data-testid="tweet"]', timeout=5000)
-        except:
-            print(f"❌ No tweets found for @{username}. Twitter may have changed its layout.")
-            browser.close()
-            return []
-
-        tweets = page.locator('article').all()
-        print(f"🟢 Found {len(tweets)} tweets for @{username}")
-
-        if not tweets:
-            print(f"❌ No tweets extracted for @{username}.")
-            browser.close()
-            return []
-
-        for tweet in tweets[:max_tweets]:
-            try:
-                tweet_id_element = tweet.locator('a[href*="/status/"]').first
-                tweet_id = tweet_id_element.get_attribute("href").split("/")[-1] if tweet_id_element else None
-
-                if not tweet_id:
-                    print(f"⚠️ Skipping tweet: No tweet ID found for @{username}")
-                    continue
-
-                tweet_link = f"https://twitter.com/{username}/status/{tweet_id}"
-
-                # ✅ Extract tweet text safely
-                tweet_text_element = tweet.locator("div[lang]").first
-                tweet_text = tweet_text_element.inner_text() if tweet_text_element and tweet_text_element.count() > 0 else "No text available"
-
-                # ✅ Extract images safely
-                image_elements = tweet.locator("img").all()
-                tweet_images = [img.get_attribute("src") for img in image_elements if img.get_attribute("src") and "twimg" in img.get_attribute("src")]
-
-                # ✅ Extract videos safely
-                video_elements = tweet.locator("video").all()
-                tweet_videos = [vid.get_attribute("src") for vid in video_elements if vid.get_attribute("src")]
-
-                # ✅ Extract timestamp safely
-                timestamp_element = tweet.locator("time").first
-                tweet_timestamp = timestamp_element.get_attribute("datetime") if timestamp_element and timestamp_element.count() > 0 else None
-
-                # ✅ Ignore old tweets (older than 7 days)
-                if tweet_timestamp:
-                    parsed_time = parsedate_to_datetime(tweet_timestamp)
-                    if (datetime.utcnow() - parsed_time).days > 7:
-                        print(f"⚠️ Skipping old tweet from @{username}: {tweet_link}")
-                        continue
-
-                # ✅ Debug log to verify extracted data
-                print(f"✅ Extracted tweet from @{username}: {tweet_link}")
-                print(f"📝 Text: {tweet_text}")
-                print(f"🖼️ Images: {tweet_images}")
-                print(f"🎥 Videos: {tweet_videos}")
-                print(f"⏳ Timestamp: {tweet_timestamp}")
-
-                tweet_data.append({
-                    "tweet_id": tweet_id,
-                    "tweet_link": tweet_link,
-                    "tweet_text": tweet_text,
-                    "tweet_images": tweet_images,
-                    "tweet_videos": tweet_videos,
-                    "tweet_timestamp": tweet_timestamp,
-                })
-            except Exception as e:
-                print(f"⚠️ Failed to extract tweet details for @{username}: {e}")
-
-        browser.close()
+        tweet_data.append({
+            "tweet_id": tweet.id,
+            "tweet_link": f"https://twitter.com/{username}/status/{tweet.id}",
+            "tweet_text": tweet.content,
+            "tweet_images": [media.fullUrl for media in tweet.media if isinstance(media, sntwitter.Photo)],
+            "tweet_videos": [media.variants[0].url for media in tweet.media if isinstance(media, sntwitter.Video)],
+            "tweet_timestamp": tweet.date.isoformat()
+        })
 
     return tweet_data
 
