@@ -31,10 +31,10 @@ def get_tweets_from_x(username, max_tweets=3):
         page = browser.new_page()
         page.goto(twitter_url, timeout=15000)
 
-        # ✅ Scroll down to load new tweets
-        for _ in range(3):  
-            page.keyboard.press("End")  
-            time.sleep(3)  
+        # ✅ Scroll down to load fresh tweets
+        for _ in range(3):
+            page.keyboard.press("End")
+            time.sleep(3)
 
         tweets = page.locator("article").all()[:max_tweets]  # Limit the number of tweets fetched
         for tweet in tweets:
@@ -44,26 +44,29 @@ def get_tweets_from_x(username, max_tweets=3):
                     continue  # Skip if no valid tweet ID
 
                 tweet_link = f"https://twitter.com/{username}/status/{tweet_id}"
-                tweet_text = tweet.locator("div[lang]").first.inner_text()
 
-                # ✅ Extract images
+                # ✅ Ensure tweet text exists before extracting
+                tweet_text_element = tweet.locator("div[lang]").first
+                tweet_text = tweet_text_element.inner_text() if tweet_text_element.count() > 0 else "No text available"
+
+                # ✅ Extract images (if available)
                 image_elements = tweet.locator("img").all()
                 tweet_images = [img.get_attribute("src") for img in image_elements if img.get_attribute("src") and "twimg" in img.get_attribute("src")]
 
-                # ✅ Extract videos
+                # ✅ Extract videos (if available)
                 video_elements = tweet.locator("video").all()
                 tweet_videos = [vid.get_attribute("src") for vid in video_elements if vid.get_attribute("src")]
 
-                # ✅ Extract timestamp and check if it's recent
+                # ✅ Extract timestamp (ensure it exists)
                 timestamp_element = tweet.locator("time").first
-                tweet_timestamp = timestamp_element.get_attribute("datetime") if timestamp_element else None
+                tweet_timestamp = timestamp_element.get_attribute("datetime") if timestamp_element.count() > 0 else None
 
-                # ✅ Ignore old tweets (more than 7 days old)
+                # ✅ Ignore old tweets (older than 7 days)
                 if tweet_timestamp:
                     parsed_time = parsedate_to_datetime(tweet_timestamp)
                     if (datetime.utcnow() - parsed_time).days > 7:
                         print(f"⚠️ Skipping old tweet from @{username}: {tweet_link}")
-                        continue  # Skip tweets older than 7 days
+                        continue
 
                 tweet_data.append({
                     "tweet_id": tweet_id,
@@ -79,6 +82,7 @@ def get_tweets_from_x(username, max_tweets=3):
         browser.close()
 
     return tweet_data
+
 
 
 def send_to_discord(webhook_url, username, tweet):
