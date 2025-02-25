@@ -1,12 +1,11 @@
-import requests
+import os
 import json
 import time
-import os
-import re
+import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 from email.utils import parsedate_to_datetime
-from xml.etree import ElementTree
+from playwright.sync_api import sync_playwright
 
 # 📝 Retrieve webhook URLs from environment variables (GitHub Secrets)
 WEBHOOKS = {
@@ -17,212 +16,84 @@ WEBHOOKS = {
     os.getenv("WEBHOOK_5"): ["NWGameStatus", "playnewworld"],
 }
 
-# ✅ List of Nitter instances to try
-NITTER_INSTANCES = [
-    "https://nitter.poast.org",
-    "https://nitter.privacydev.net",
-    "https://nitter.42l.fr",
-    "https://nitter.cz"
-]
-
 # 📁 Directory to store last tweet IDs
 LAST_TWEETS_DIR = "last_tweets"
 os.makedirs(LAST_TWEETS_DIR, exist_ok=True)
 
 
-def get_working_nitter_instance(username):
-    """Try different Nitter instances until one works for the given username."""
-    for instance in NITTER_INSTANCES:
-        url = f"{instance}/{username}/rss"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        try:
-            response = requests.get(url, headers=headers, timeout=5)
-            if response.status_code == 200 and response.text.strip().startswith("<?xml"):
-                print(f"✅ Using Nitter instance: {instance} for @{username}")
-                return instance
-        except requests.RequestException:
-            continue
-    print(f"❌ No working Nitter instance found for @{username}")
-    return None
-
-
-import random
-
-def extract_media_from_tweet(tweet_link):
-    """Fetch the Nitter tweet page and extract media (image/video) using OpenGraph metadata."""
-    try:
-        # ✅ Introduce a random delay to prevent hitting rate limits
-        time.sleep(random.uniform(1, 3))  # Delay between 1-3 seconds
-
-        headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(tweet_link, headers=headers, timeout=5)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.text, "html.parser")
-        meta_image = soup.find("meta", property="og:image")
-        
-        if meta_image:
-            og_image = meta_image.get("content")
-            if og_image and og_image.startswith("http"):
-                print(f"✅ Extracted media from tweet page: {og_image}")
-                return og_image
-
-    except requests.exceptions.HTTPError as e:
-        if response.status_code == 429:
-            print(f"⚠️ Rate limited by Nitter for {tweet_link}. Retrying with another instance...")
-            return retry_media_extraction(tweet_link)  # Retry with another Nitter instance
-
-    except requests.exceptions.RequestException as e:
-        print(f"⚠️ Failed to extract media from tweet page {tweet_link}: {e}")
-
-    return None  # No valid image found
-
-def retry_media_extraction(tweet_link):
-    """Retry extracting media using another Nitter instance if rate-limited."""
-    for instance in NITTER_INSTANCES:
-        alternate_tweet_link = tweet_link.replace(NITTER_INSTANCES[0], instance)  # Swap instances
-        try:
-            print(f"🔄 Retrying media extraction with {instance}")
-            headers = {"User-Agent": "Mozilla/5.0"}
-            response = requests.get(alternate_tweet_link, headers=headers, timeout=5)
-            response.raise_for_status()
-            
-            soup = BeautifulSoup(response.text, "html.parser")
-            meta_image = soup.find("meta", property="og:image")
-            
-            if meta_image:
-                og_image = meta_image.get("content")
-                if og_image and og_image.startswith("http"):
-                    print(f"✅ Extracted media from alternate instance: {og_image}")
-                    return og_image
-
-        except requests.exceptions.RequestException:
-            print(f"⚠️ Failed to fetch media from {instance}. Trying next instance...")
-
-    print(f"❌ All Nitter instances failed for {tweet_link}")
-    return None
-
-
-def extract_image_from_description(description, tweet_link):
-    """
-    Extract a valid media URL from the tweet description using Nitter RSS.
-    If no image is found in the description, fallback to fetching the tweet page.
-    """
-    if description:
-        soup = BeautifulSoup(description, "html.parser")
-        img_tag = soup.find("img")
-        if img_tag:
-            img_url = img_tag.get("src")
-            if img_url and img_url.startswith("http") and "nitter" not in img_url:
-                print(f"✅ Extracted image from RSS: {img_url}")
-                return img_url
-    # Fallback: fetch media from the tweet page
-    print("⚠️ No image found in RSS description, attempting to fetch media from tweet page...")
-    return extract_media_from_tweet(tweet_link)
-
-
-def clean_tweet_description(description):
-    """Remove HTML tags and unwanted characters from the tweet description."""
-    if description:
-        soup = BeautifulSoup(description, "html.parser")
-        return soup.get_text().strip()
-    return None
-
-
-from playwright.sync_api import sync_playwright
-import time
-
-def get_latest_tweets(username, max_tweets=3):
+def get_tweets_from_x(username, max_tweets=3):
     """Fetch the latest tweets from Twitter/X using Playwright."""
+    tweet_data = []
+    twitter_url = f"https://twitter.com/{username}"
+
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)  # ✅ Run in headless mode
+        browser = p.chromium.launch(headless=True)
         page = browser.new_page()
-        page.goto(f"https://x.com/{username}")
+        page.goto(twitter_url, timeout=10000)
+        time.sleep(5)  # Allow tweets to load
 
-        # ✅ Wait for tweets to load
-        page.wait_for_selector('article', timeout=10000)
-
-        # ✅ Scroll down to load more tweets
-        for _ in range(3):  # Scroll 3 times to load recent tweets
-            page.keyboard.press("PageDown")
-            time.sleep(2)  # Give time for new tweets to load
-
-        # ✅ Extract tweet elements
-        tweet_elements = page.locator('article').all()
-        tweets = []
-
-        for tweet in tweet_elements[:max_tweets]:  # ✅ Limit tweets
+        tweets = page.locator("article").all()[:max_tweets]  # Limit the number of tweets fetched
+        for tweet in tweets:
             try:
-                tweet_text = tweet.inner_text()
-                tweet_link = f"https://x.com/{username}/status/{tweet.get_attribute('data-tweet-id')}"
+                tweet_id = tweet.get_attribute("data-testid")  # Twitter uses unique IDs for tweets
+                tweet_link = f"https://twitter.com/{username}/status/{tweet_id}"
+                tweet_text = tweet.locator("div[lang]").first.inner_text()
 
-                # ✅ Extract media (image or video)
-                # ✅ Extract images and videos properly
-image_element = tweet.locator("img").first
-video_element = tweet.locator("video source").first
+                # Extract images (if available)
+                image_elements = tweet.locator("img").all()
+                tweet_images = [img.get_attribute("src") for img in image_elements if img.get_attribute("src")]
 
-tweet_image = image_element.get_attribute("src") if image_element else None
-tweet_video = video_element.get_attribute("src") if video_element else None
+                # Extract video (if available)
+                video_elements = tweet.locator("video").all()
+                tweet_videos = [vid.get_attribute("src") for vid in video_elements if vid.get_attribute("src")]
 
-# ✅ If there's a video, prioritize video over image
-tweet_media = tweet_video if tweet_video else tweet_image
+                tweet_timestamp = tweet.locator("time").first.get_attribute("datetime")
 
-                # ✅ Extract timestamp properly
-                timestamp_element = tweet.locator("time")
-                tweet_timestamp = timestamp_element.get_attribute("datetime") if timestamp_element else None
-
-                tweets.append((tweet_link, tweet_text, tweet_image, tweet_timestamp))
+                tweet_data.append({
+                    "tweet_id": tweet_id,
+                    "tweet_link": tweet_link,
+                    "tweet_text": tweet_text,
+                    "tweet_images": tweet_images,
+                    "tweet_videos": tweet_videos,
+                    "tweet_timestamp": tweet_timestamp,
+                })
             except Exception as e:
-                print(f"⚠️ Error extracting tweet data: {e}")
+                print(f"⚠️ Failed to extract tweet details for @{username}: {e}")
 
         browser.close()
-        return tweets  # ✅ Return extracted tweets
+
+    return tweet_data
 
 
-def send_to_discord(webhook_url, username, tweet_link, tweet_description, tweet_image, tweet_timestamp):
-    """Send new tweet to Discord webhook with correct timestamp."""
+def send_to_discord(webhook_url, username, tweet):
+    """Send new tweet to Discord webhook with images/videos."""
     if not webhook_url:
         print(f"⚠️ Skipping @{username}: Webhook URL is missing.")
         return
 
-    clean_description = clean_tweet_description(tweet_description)
-
     embed = {
         "title": f"📢 New Tweet from @{username}",
-        "url": tweet_link,
-        "description": clean_description if clean_description else "Click the link to view the tweet!",
-        "color": 1942002,  # Blue color for embed
+        "url": tweet["tweet_link"],
+        "description": tweet["tweet_text"] if tweet["tweet_text"] else "Click the link to view the tweet!",
+        "color": 1942002,
         "footer": {
             "text": f"Follow @{username} for more updates!",
             "icon_url": "https://abs.twimg.com/icons/apple-touch-icon-192x192.png"
         }
     }
 
-    # ✅ Ensure valid images before adding
-    if tweet_image:
-        try:
-            img_response = requests.get(tweet_image, timeout=5)
-            if img_response.status_code == 200 and tweet_image.startswith("http"):
-                embed["image"] = {"url": tweet_image}
-            else:
-                print(f"⚠️ Image URL is invalid or blocked: {tweet_image}")
-        except requests.exceptions.RequestException:
-            print(f"⚠️ Image could not be loaded: {tweet_image}")
+    # ✅ Add images if available
+    if tweet["tweet_images"]:
+        embed["image"] = {"url": tweet["tweet_images"][0]}  # Only use the first image
 
-    # ✅ Check if timestamp is valid before parsing
-    if tweet_timestamp:
-        try:
-            parsed_time = parsedate_to_datetime(tweet_timestamp)
-            embed["timestamp"] = parsed_time.isoformat()
-        except Exception as e:
-            print(f"⚠️ Failed to parse tweet timestamp for {username}: {e}")
+    # ✅ Add video link as a field (since Discord doesn't support video embeds)
+    if tweet["tweet_videos"]:
+        embed["fields"] = [{"name": "🎥 Video", "value": tweet["tweet_videos"][0]}]
 
-    # ✅ Add author field for better formatting
-    embed["author"] = {
-        "name": f"@{username}",
-        "url": f"https://twitter.com/{username}",
-        "icon_url": "https://abs.twimg.com/icons/apple-touch-icon-192x192.png"
-    }
+    # ✅ Add timestamp
+    if tweet["tweet_timestamp"]:
+        parsed_time = parsedate_to_datetime(tweet["tweet_timestamp"])
+        embed["timestamp"] = parsed_time.isoformat()
 
     payload = {"embeds": [embed]}
     headers = {"Content-Type": "application/json"}
@@ -237,21 +108,17 @@ def load_last_tweets(username):
 
     if os.path.exists(file_path):
         with open(file_path, "r") as f:
-            return set(f.read().strip().split("\n"))  # Store as a set to prevent duplicates
+            return set(f.read().strip().split("\n"))
 
-    return set()  # Return empty set if no history exists
+    return set()
 
 
 def save_last_tweets(username, tweet_ids):
     """Save all tweet IDs that have been posted to prevent duplicates."""
     file_path = os.path.join(LAST_TWEETS_DIR, f"{username}.txt")
-
-    # ✅ Only keep the last 50 tweet IDs to optimize memory
     tweet_ids = list(tweet_ids)[-50:]
-
     with open(file_path, "w") as f:
-        f.write("\n".join(tweet_ids))  # Store all tweet IDs
-
+        f.write("\n".join(tweet_ids))
 
 
 def main():
@@ -262,16 +129,25 @@ def main():
                 continue
 
             for username in usernames:
-                tweets = get_latest_tweets(username, max_tweets=3)
+                last_tweet_ids = load_last_tweets(username)
+                tweets = get_tweets_from_x(username, max_tweets=3)
 
-                for tweet_link, tweet_text, tweet_image, tweet_timestamp in tweets:
-                    print(f"✅ New tweet found for @{username}: {tweet_link}")
+                for tweet in reversed(tweets):
+                    if tweet["tweet_id"] in last_tweet_ids:
+                        print(f"⚠️ Skipping duplicate tweet for @{username}: {tweet['tweet_link']}")
+                        continue
 
-                    # ✅ Send tweet to Discord
-                    send_to_discord(webhook_url, username, tweet_link, tweet_text, tweet_image, tweet_timestamp)
+                    print(f"✅ New tweet found for @{username}: {tweet['tweet_link']}")
+                    status = send_to_discord(webhook_url, username, tweet)
 
-        time.sleep(300)  # ✅ Check every 5 minutes
+                    if status == 204:
+                        last_tweet_ids.add(tweet["tweet_id"])
+                        save_last_tweets(username, last_tweet_ids)
+                        print(f"📢 Tweet posted to Discord webhook {webhook_url} for @{username}!")
+                    else:
+                        print(f"⚠️ Failed to post tweet for @{username}. Status Code: {status}")
 
+        time.sleep(60)
 
 
 if __name__ == "__main__":
