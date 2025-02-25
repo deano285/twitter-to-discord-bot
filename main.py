@@ -22,12 +22,12 @@ os.makedirs(LAST_TWEETS_DIR, exist_ok=True)
 
 
 def get_tweets_from_x(username, max_tweets=3):
-    """Fetch the latest tweets from Twitter/X using Playwright with better error handling."""
+    """Fetch the latest tweets from Twitter/X using Playwright with detailed debugging."""
     tweet_data = []
     twitter_url = f"https://twitter.com/{username}"
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=False)  # Set headless=False for testing
         page = browser.new_page()
         page.goto(twitter_url, timeout=15000)
         time.sleep(5)  # Allow tweets to load
@@ -37,19 +37,29 @@ def get_tweets_from_x(username, max_tweets=3):
             page.keyboard.press("End")
             time.sleep(2)
 
-        tweets = page.locator("article").all()[:max_tweets]  # Limit to recent tweets
-        for tweet in tweets:
+        tweets = page.locator("article").all()
+        print(f"🟢 Found {len(tweets)} tweets for @{username}")
+
+        if not tweets:
+            print(f"❌ No tweets found for @{username}. Twitter may have changed its layout.")
+            browser.close()
+            return []
+
+        for tweet in tweets[:max_tweets]:
             try:
-                tweet_id = tweet.get_attribute("data-testid")
-                if not tweet_id:
+                # ✅ Debug: Print raw tweet structure
+                print(f"🔎 Raw tweet HTML: {tweet.inner_html()}")
+
+                tweet_id_element = tweet.get_attribute("data-testid")
+                if not tweet_id_element:
                     print(f"⚠️ Skipping tweet: No tweet ID found for @{username}")
-                    continue  # Skip invalid tweet
-                
-                tweet_link = f"https://twitter.com/{username}/status/{tweet_id}"
+                    continue
+
+                tweet_link = f"https://twitter.com/{username}/status/{tweet_id_element}"
 
                 # ✅ Extract tweet text safely
                 tweet_text_element = tweet.locator("div[lang]").first
-                tweet_text = tweet_text_element.inner_text() if tweet_text_element.count() > 0 else "No text available"
+                tweet_text = tweet_text_element.inner_text() if tweet_text_element and tweet_text_element.count() > 0 else "No text available"
 
                 # ✅ Extract images safely
                 image_elements = tweet.locator("img").all()
@@ -61,7 +71,7 @@ def get_tweets_from_x(username, max_tweets=3):
 
                 # ✅ Extract timestamp safely
                 timestamp_element = tweet.locator("time").first
-                tweet_timestamp = timestamp_element.get_attribute("datetime") if timestamp_element.count() > 0 else None
+                tweet_timestamp = timestamp_element.get_attribute("datetime") if timestamp_element and timestamp_element.count() > 0 else None
 
                 # ✅ Ignore old tweets (older than 7 days)
                 if tweet_timestamp:
@@ -78,7 +88,7 @@ def get_tweets_from_x(username, max_tweets=3):
                 print(f"⏳ Timestamp: {tweet_timestamp}")
 
                 tweet_data.append({
-                    "tweet_id": tweet_id,
+                    "tweet_id": tweet_id_element,
                     "tweet_link": tweet_link,
                     "tweet_text": tweet_text,
                     "tweet_images": tweet_images,
