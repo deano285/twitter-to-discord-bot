@@ -5,7 +5,6 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 from email.utils import parsedate_to_datetime
-from playwright.sync_api import sync_playwright
 
 # 📝 Retrieve webhook URLs from environment variables (GitHub Secrets)
 WEBHOOKS = {
