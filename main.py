@@ -22,7 +22,7 @@ os.makedirs(LAST_TWEETS_DIR, exist_ok=True)
 
 
 def get_tweets_from_x(username, max_tweets=3):
-    """Fetch the latest tweets from Twitter/X using Playwright."""
+    """Fetch the latest tweets from Twitter/X using Playwright with better error handling."""
     tweet_data = []
     twitter_url = f"https://twitter.com/{username}"
 
@@ -30,34 +30,36 @@ def get_tweets_from_x(username, max_tweets=3):
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         page.goto(twitter_url, timeout=15000)
+        time.sleep(5)  # Allow tweets to load
 
-        # ✅ Scroll down to load fresh tweets
-        for _ in range(3):
+        # ✅ Scroll down multiple times to ensure fresh tweets load
+        for _ in range(5):
             page.keyboard.press("End")
-            time.sleep(3)
+            time.sleep(2)
 
-        tweets = page.locator("article").all()[:max_tweets]  # Limit the number of tweets fetched
+        tweets = page.locator("article").all()[:max_tweets]  # Limit to recent tweets
         for tweet in tweets:
             try:
                 tweet_id = tweet.get_attribute("data-testid")
                 if not tweet_id:
-                    continue  # Skip if no valid tweet ID
-
+                    print(f"⚠️ Skipping tweet: No tweet ID found for @{username}")
+                    continue  # Skip invalid tweet
+                
                 tweet_link = f"https://twitter.com/{username}/status/{tweet_id}"
 
-                # ✅ Ensure tweet text exists before extracting
+                # ✅ Extract tweet text safely
                 tweet_text_element = tweet.locator("div[lang]").first
                 tweet_text = tweet_text_element.inner_text() if tweet_text_element.count() > 0 else "No text available"
 
-                # ✅ Extract images (if available)
+                # ✅ Extract images safely
                 image_elements = tweet.locator("img").all()
                 tweet_images = [img.get_attribute("src") for img in image_elements if img.get_attribute("src") and "twimg" in img.get_attribute("src")]
 
-                # ✅ Extract videos (if available)
+                # ✅ Extract videos safely
                 video_elements = tweet.locator("video").all()
                 tweet_videos = [vid.get_attribute("src") for vid in video_elements if vid.get_attribute("src")]
 
-                # ✅ Extract timestamp (ensure it exists)
+                # ✅ Extract timestamp safely
                 timestamp_element = tweet.locator("time").first
                 tweet_timestamp = timestamp_element.get_attribute("datetime") if timestamp_element.count() > 0 else None
 
@@ -67,6 +69,13 @@ def get_tweets_from_x(username, max_tweets=3):
                     if (datetime.utcnow() - parsed_time).days > 7:
                         print(f"⚠️ Skipping old tweet from @{username}: {tweet_link}")
                         continue
+
+                # ✅ Debug log to verify extracted data
+                print(f"✅ Extracted tweet from @{username}: {tweet_link}")
+                print(f"📝 Text: {tweet_text}")
+                print(f"🖼️ Images: {tweet_images}")
+                print(f"🎥 Videos: {tweet_videos}")
+                print(f"⏳ Timestamp: {tweet_timestamp}")
 
                 tweet_data.append({
                     "tweet_id": tweet_id,
@@ -82,6 +91,7 @@ def get_tweets_from_x(username, max_tweets=3):
         browser.close()
 
     return tweet_data
+
 
 
 
