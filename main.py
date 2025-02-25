@@ -90,16 +90,20 @@ def send_to_discord(webhook_url, username, tweet):
     if tweet["tweet_videos"]:
         embed["fields"] = [{"name": "🎥 Video", "value": tweet["tweet_videos"][0]}]
 
-    # ✅ Add timestamp
+    # ✅ Ensure timestamp exists before parsing
     if tweet["tweet_timestamp"]:
-        parsed_time = parsedate_to_datetime(tweet["tweet_timestamp"])
-        embed["timestamp"] = parsed_time.isoformat()
+        try:
+            parsed_time = parsedate_to_datetime(tweet["tweet_timestamp"])
+            embed["timestamp"] = parsed_time.isoformat()
+        except Exception as e:
+            print(f"⚠️ Failed to parse tweet timestamp: {tweet['tweet_timestamp']}. Error: {e}")
 
     payload = {"embeds": [embed]}
     headers = {"Content-Type": "application/json"}
 
     response = requests.post(webhook_url, data=json.dumps(payload), headers=headers)
     return response.status_code
+
 
 
 def load_last_tweets(username):
