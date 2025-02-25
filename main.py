@@ -21,10 +21,6 @@ LAST_TWEETS_DIR = "last_tweets"
 os.makedirs(LAST_TWEETS_DIR, exist_ok=True)
 
 
-from playwright.sync_api import sync_playwright
-import time
-from email.utils import parsedate_to_datetime
-from datetime import datetime
 
 import snscrape.modules.twitter as sntwitter
 
