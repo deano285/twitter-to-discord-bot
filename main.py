@@ -27,7 +27,7 @@ def get_tweets_from_x(username, max_tweets=3):
     twitter_url = f"https://twitter.com/{username}"
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)  # Set headless=False for testing
+        browser = p.chromium.launch(headless=True)  # Run in headless mode for GitHub Actions
         page = browser.new_page()
         page.goto(twitter_url, timeout=15000)
         time.sleep(5)  # Allow tweets to load
