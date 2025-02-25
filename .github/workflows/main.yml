@@ -26,11 +26,11 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: Install Dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install playwright
-          playwright install
+- name: Install Dependencies
+  run: |
+    pip install -r requirements.txt
+    pip install snscrape
+
 
       - name: Run Bot
         env:
