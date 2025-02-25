@@ -21,22 +21,30 @@ os.makedirs(LAST_TWEETS_DIR, exist_ok=True)
 
 
 
-import snscrape.modules.twitter as sntwitter
+import twint
+import json
+import datetime
 
 def get_tweets_from_x(username, max_tweets=3):
-    """Fetch the latest tweets from Twitter/X using snscrape."""
-    tweet_data = []
-    for i, tweet in enumerate(sntwitter.TwitterUserScraper(username).get_items()):
-        if i >= max_tweets:
-            break
+    """Fetch latest tweets from Twitter/X using Twint."""
+    c = twint.Config()
+    c.Username = username
+    c.Limit = max_tweets
+    c.Store_object = True
+    c.Hide_output = True
 
+    twint.run.Search(c)
+    tweets = twint.output.tweets_list
+
+    tweet_data = []
+    for tweet in tweets:
         tweet_data.append({
             "tweet_id": tweet.id,
             "tweet_link": f"https://twitter.com/{username}/status/{tweet.id}",
-            "tweet_text": tweet.content,
-            "tweet_images": [media.fullUrl for media in tweet.media if isinstance(media, sntwitter.Photo)],
-            "tweet_videos": [media.variants[0].url for media in tweet.media if isinstance(media, sntwitter.Video)],
-            "tweet_timestamp": tweet.date.isoformat()
+            "tweet_text": tweet.tweet,
+            "tweet_images": tweet.photos,  # List of image URLs
+            "tweet_videos": tweet.video if tweet.video else [],
+            "tweet_timestamp": tweet.datestamp + " " + tweet.timestamp
         })
 
     return tweet_data
