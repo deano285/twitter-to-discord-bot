@@ -26,37 +26,31 @@ import time
 from email.utils import parsedate_to_datetime
 from datetime import datetime
 
-from playwright.sync_api import sync_playwright
-import time
-from email.utils import parsedate_to_datetime
-from datetime import datetime
-
 def get_tweets_from_x(username, max_tweets=3):
-    """Fetch the latest tweets from Twitter/X using Playwright with updated selectors and debugging."""
+    """Fetch the latest tweets from Twitter/X using Playwright with improved error handling."""
     tweet_data = []
     twitter_url = f"https://twitter.com/{username}"
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)  # Run headless in GitHub Actions
-        page = browser.new_page(
-    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-)
-        page.goto(twitter_url, timeout=15000)
+        browser = p.chromium.launch(headless=True)  # Run in headless mode for GitHub
+        page = browser.new_page()
+        
+        try:
+            page.goto(twitter_url, timeout=20000)  # Increase timeout
+        except:
+            print(f"❌ Failed to load Twitter page for @{username}. Retrying...")
+            page.reload()
 
         # ✅ Scroll multiple times to ensure fresh tweets load
-        for _ in range(5):
-            page.keyboard.press("End")
+        for _ in range(5):  
+            page.keyboard.press("End")  
             time.sleep(3)
 
-        # ✅ Take a screenshot for debugging if tweets are not found
-        page.screenshot(path=f"screenshot_{username}.png")
-
-        # ✅ Wait for tweets to load and debug if none are found
+        # ✅ Ensure Playwright doesn't get stuck waiting
         try:
             page.wait_for_selector('article [data-testid="tweet"]', timeout=5000)
         except:
             print(f"❌ No tweets found for @{username}. Twitter may have changed its layout.")
-            page.screenshot(path=f"screenshot_no_tweets_{username}.png")  # Debugging screenshot
             browser.close()
             return []
 
@@ -64,14 +58,12 @@ def get_tweets_from_x(username, max_tweets=3):
         print(f"🟢 Found {len(tweets)} tweets for @{username}")
 
         if not tweets:
-            print(f"❌ No tweets extracted for @{username}. Taking screenshot...")
-            page.screenshot(path=f"screenshot_failed_{username}.png")  # Debugging screenshot
+            print(f"❌ No tweets extracted for @{username}.")
             browser.close()
             return []
 
         for tweet in tweets[:max_tweets]:
             try:
-                # ✅ Locate tweet ID safely
                 tweet_id_element = tweet.locator('a[href*="/status/"]').first
                 tweet_id = tweet_id_element.get_attribute("href").split("/")[-1] if tweet_id_element else None
 
