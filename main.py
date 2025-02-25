@@ -26,26 +26,37 @@ import time
 from email.utils import parsedate_to_datetime
 from datetime import datetime
 
+from playwright.sync_api import sync_playwright
+import time
+from email.utils import parsedate_to_datetime
+from datetime import datetime
+
 def get_tweets_from_x(username, max_tweets=3):
-    """Fetch the latest tweets from Twitter/X using Playwright with improved selectors."""
+    """Fetch the latest tweets from Twitter/X using Playwright with updated selectors and debugging."""
     tweet_data = []
     twitter_url = f"https://twitter.com/{username}"
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)  # Use headless mode for GitHub
-        page = browser.new_page()
+        browser = p.chromium.launch(headless=True)  # Run headless in GitHub Actions
+        page = browser.new_page(
+    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+)
         page.goto(twitter_url, timeout=15000)
 
         # ✅ Scroll multiple times to ensure fresh tweets load
-        for _ in range(5):  
-            page.keyboard.press("End")  
-            time.sleep(3)  
+        for _ in range(5):
+            page.keyboard.press("End")
+            time.sleep(3)
 
-        # ✅ Wait for tweets to load
+        # ✅ Take a screenshot for debugging if tweets are not found
+        page.screenshot(path=f"screenshot_{username}.png")
+
+        # ✅ Wait for tweets to load and debug if none are found
         try:
             page.wait_for_selector('article [data-testid="tweet"]', timeout=5000)
         except:
             print(f"❌ No tweets found for @{username}. Twitter may have changed its layout.")
+            page.screenshot(path=f"screenshot_no_tweets_{username}.png")  # Debugging screenshot
             browser.close()
             return []
 
@@ -53,7 +64,8 @@ def get_tweets_from_x(username, max_tweets=3):
         print(f"🟢 Found {len(tweets)} tweets for @{username}")
 
         if not tweets:
-            print(f"❌ No tweets extracted for @{username}.")
+            print(f"❌ No tweets extracted for @{username}. Taking screenshot...")
+            page.screenshot(path=f"screenshot_failed_{username}.png")  # Debugging screenshot
             browser.close()
             return []
 
